@@ -6,14 +6,30 @@ from io import BytesIO
 async def read_image(file):
     contents = await file.read()
     image = Image.open(BytesIO(contents))
+    if image.mode == 'RGBA':
+        image = image.convert('RGB')
+
     return image
 
 
 def preprocess_image(image, image_size):
     image = image.resize(image_size)
     image = np.array(image).astype('float32') / 255.
+
     image = np.transpose(image, [2, 0, 1])
     return image
+
+
+def normalize(output_image):
+    # [-1, 1] -> [0, 1]
+    normalized_image = (output_image + 1) / 2
+    return normalized_image
+
+
+def denormalize(normalized_image):
+    # [0, 1] -> [-1, 1]
+    denormalized_image = normalized_image * 2 - 1
+    return denormalized_image
 
 
 def draw_box(image, targets, color=(0, 255, 0), image_size=(640, 640)):
@@ -28,6 +44,46 @@ def draw_box(image, targets, color=(0, 255, 0), image_size=(640, 640)):
         y2 = int((y_center + box_h / 2) * img_h / h)
         draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
     return image
+
+
+def get_boxes(image, targets, image_size=(640, 640)):
+    w, h = image_size
+    img_w, img_h = image.size
+    boxes = {'xyxy': [], 'xywh': [], 'xywhc': []}
+    for target in targets:
+        x_center, y_center, box_w, box_h = target
+        # xyxy
+        x1 = (x_center - box_w / 2) * img_w / w
+        y1 = (y_center - box_h / 2) * img_h / h
+        x2 = (x_center + box_w / 2) * img_w / w
+        y2 = (y_center + box_h / 2) * img_h / h
+        boxes['xyxy'].append((x1, y1, x2, y2))
+
+        box_w = x2 - x1
+        box_h = y2 - y1
+        # xywh
+        boxes['xywh'].append((x1, y1, box_w, box_h))
+
+        # xywhc
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        boxes['xywhc'].append((cx, cy, box_w, box_h))
+
+    return boxes
+
+
+def get_landmarks(image, points, labels, image_size=(320, 320)):
+    w, h = image_size
+    img_w, img_h = image.size
+    adjusted_points = {}
+    for i in range(0, len(points), 2):
+        x = points[i] * img_w / w
+        y = points[i + 1] * img_h / h
+        label = labels[i // 2]
+        adjusted_points[label] = [x, y]
+    return adjusted_points
+
+
 
 
 def draw_landmarks(image, points, color=(0, 0, 255), image_size=(320, 320)):

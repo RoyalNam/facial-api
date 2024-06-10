@@ -3,20 +3,32 @@ import numpy as np
 from io import BytesIO
 
 
-async def read_image(file):
+async def read_image(file, mode='RGB'):
     contents = await file.read()
     image = Image.open(BytesIO(contents))
-    if image.mode == 'RGBA':
-        image = image.convert('RGB')
+
+    if mode == 'L':
+        if image.mode != 'L':
+            image = image.convert('L')
+    else:
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
 
     return image
 
 
 def preprocess_image(image, image_size):
     image = image.resize(image_size)
+    image = np.array(image)
+
+    if len(image.shape) == 3:
+        image = np.transpose(image, [2, 0, 1])
+    elif len(image.shape) == 2:
+        image = np.expand_dims(image, axis=0)
+    else:
+        raise ValueError("Unsupported image format")
     image = np.array(image).astype('float32') / 255.
 
-    image = np.transpose(image, [2, 0, 1])
     return image
 
 
@@ -82,8 +94,6 @@ def get_landmarks(image, points, labels, image_size=(320, 320)):
         label = labels[i // 2]
         adjusted_points[label] = [x, y]
     return adjusted_points
-
-
 
 
 def draw_landmarks(image, points, color=(0, 0, 255), image_size=(320, 320)):
